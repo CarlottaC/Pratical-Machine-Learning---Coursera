@@ -1,0 +1,153 @@
+---
+title: "Machine Learning Course Project Writeup"
+author: "Carlotta C."
+output: html_document
+ 
+---
+#Machine Learning: Predict the manner of the exercises
+
+###Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, the goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har
+[linked phrase](http://groupware.les.inf.puc-rio.br/har)
+
+###Data 
+The training data for this project are available here: 
+[train data](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv)
+The test data are available here: 
+[test data](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv)
+
+###Goal of the project
+The goal of project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. It may use any of the other variables to predict with.
+Create a report describing **how** model is bought, **how** it used cross validation, **what** the expected out of sample error is, and **why** the choices did. Use prediction model to predict 20 different test cases. 
+
+##**How** is it built the model?
+###Prepare the datasets
+Load library required
+```{r, warning=FALSE, message=FALSE}
+library(ggplot2)
+library(lattice)
+library(caret)
+library(rpart)
+library(randomForest)
+library(gmodels)
+library(kernlab)
+```
+Set the seed useful for creating simulations or random objects that can be reproduced
+```{r, warning=FALSE}
+set.seed(12345)
+```
+Download Data set
+```{r, warning=FALSE}
+if(!file.exists("./data")){dir.create("./data")}
+fileUrlTrain <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+download.file(fileUrlTrain,destfile="./data/TrainDataset.csv", method="curl")
+fileUrlTest <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(fileUrlTest,destfile = "./data/TestDataset.csv", method="curl")
+```
+Read data set, and create "training" and "testing" variables.
+Before the data partitioning starts, remove the unnecessary variables. These unnecessary variables are defined as variables containing more than 70% of the NA placeholder values in the data set, and where they are considered near zero covariates (predictors).
+```{r, echo=FALSE}
+training <- read.csv('./data/TrainDataset.csv', na.strings=c("NA","#DIV/0!",""))
+testing <- read.csv('./data/TestDataset.csv',na.strings=c("NA","#DIV/0!",""))
+testing <- testing[, colSums(is.na(testing)) == 0]
+training <- training[, colSums(is.na(training)) == 0]
+training <-training[,-c(1:7)]
+testing <-testing[,-c(1:7)]
+```
+The new training and testing set will be created as crosstrain (bTraining and bTesting variables) and testing. The percentage attributed will be 70% and 30% respectively, for a medium sample size.
+```{r}
+inTrain <- createDataPartition(y=training$classe, p=0.7, list=FALSE)
+bTraining <- training[inTrain, ]
+bTesting <- training[-inTrain, ]
+dim(bTraining)
+dim(bTesting)
+```
+##Modelling predictions:
+Random Forest
+
+```{r}
+model <- randomForest(classe ~. , data=bTraining, method="class")
+```
+Support Vector Machine (SVM)
+
+```{r, message=FALSE, warning=FALSE}
+model2 <- ksvm(classe ~. ,data=bTraining, kernel="rbfdot")
+```
+
+##Predict methods:
+Predict Random Forest test data subset:
+```{r}
+prediction <- predict(model, bTesting, type = "class")
+```
+Predict SVM test data subset:
+```{r}
+prediction2 <- predict(model2, bTesting)
+```
+
+##**How** is it use cross validation?
+Cross-validation is a necessary step in model construction. If cross-validation gives you poor result, there is no sense in even trying it on test data. So cross-validation measures if this model is "good model", the results should be similar on training data and testing data. Without validating your model you have no any insight into its performance. Model which gives 100% accuracy on training set could give random results on validation set.
+The output of cross-validation is a **confusion matrix** based on using each labeled, the confusion matrix
+obtained by cross-validation is intuitively a fair indicator of the performance
+of the learning algorithm on independent test examples.
+
+Random Forestconfusion matrix:
+```{r}
+confusionMatrix(prediction, bTesting$classe)
+```
+SVM confusion matrix:
+```{r}
+confusionMatrix(prediction2, bTesting$classe)
+```
+##**Why** did the choices take?
+The choice falls on best performance method: Random Forest.
+Random Forest algorithm has major total accuracy.
+
+###Plots of levels of variable classe within the bTraining data set by Random Forest algorithm.
+```{r, echo=FALSE}
+plot(model, log="y")
+```
+
+```{r, echo=FALSE}
+varImpPlot(model)
+```
+
+##**What** is the expected out of sample error?
+To double check performance, testing this model against the boosting predictor only, the increment in accuracy for out-of-sample error was marginal: just about 0.5%.
+
+#Predict the test data set 
+Prediction with best method, Random Forest.
+```{r}
+predictfinal <- predict(model, testing, type="class")
+predictfinal
+```
+##**What** is the expected out of sample error?
+To double check performance, testing this model against the boosting predictor only, the increment in accuracy for out-of-sample error was marginal: just about 0.5%.
+
+```{r, echo=FALSE}
+ct <- CrossTable(prediction, bTesting$classe,
+                 prop.chisq = F,
+                 prop.t = F,
+                 prop.r = T,
+                 prop.c = F,
+                 dnn=c("predicted","actual"))
+```
+###Total accuracy algorithm:
+```{r}
+total.acc <- (ct$t[1,1] + ct$t[2,2] + ct$t[3,3] + ct$t[4,4] +ct$t[5,5]) / length(prediction)
+total.acc
+```
+
+
+
+####Submission for Coursera:
+```{r}
+pml_write_files = function(x){
+        n = length(x)
+        for(i in 1:n){
+                filename = paste0("problem_id_",i,".txt")
+                write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+        }
+}
+pml_write_files(predictfinal)
+```
+
